@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import LiveDispatch from '@/components/admin/LiveDispatch';
 
-type Tab = 'jobs' | 'users' | 'providers' | 'payments';
+type Tab = 'dispatch' | 'jobs' | 'users' | 'providers' | 'payments';
 
 interface Stats {
   users: { total: number; customers: number; providers: number; admins: number };
@@ -38,6 +39,7 @@ export default function AdminPage() {
 
   const loadTab = useCallback(
     (t: Tab) => {
+      if (t === 'dispatch') return; // live view manages its own data over Socket.IO
       setBusy(true);
       authedFetch(`/api/admin/${t}`)
         .then((r) => (r.ok ? r.json() : { [t]: [] }))
@@ -96,7 +98,7 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="mt-10 flex flex-wrap gap-2 border-b border-trim">
-        {(['jobs', 'users', 'providers', 'payments'] as Tab[]).map((t) => (
+        {(['dispatch', 'jobs', 'users', 'providers', 'payments'] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -104,13 +106,15 @@ export default function AdminPage() {
               tab === t ? 'border-secondary text-forest' : 'border-transparent text-ink/60 hover:text-ink'
             }`}
           >
-            {t === 'jobs' ? 'Live jobs' : t}
+            {t === 'dispatch' ? 'Live dispatch' : t === 'jobs' ? 'Recent jobs' : t}
           </button>
         ))}
       </div>
 
       <div className="mt-6 overflow-x-auto">
-        {busy ? (
+        {tab === 'dispatch' ? (
+          <LiveDispatch />
+        ) : busy ? (
           <p className="py-10 text-center text-ink/60">Loading…</p>
         ) : (
           <TabTable tab={tab} rows={rows} onToggleSuspension={toggleSuspension} />

@@ -15,7 +15,10 @@ export type TrackingUpdate = {
   jobId: string;
   lng: number;
   lat: number;
-  etaSeconds: number;
+  etaSeconds?: number;
   remainingMeters?: number;
+  heading?: number | null;
+  accuracy?: number | null;
+  arrivalRadiusMeters?: number;
   at: string;
 };

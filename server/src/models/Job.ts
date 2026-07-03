@@ -58,6 +58,8 @@ const jobSchema = new Schema(
     tracking: {
       providerLocation: { type: [Number] }, // [lng, lat]
       etaSeconds: Number,
+      heading: Number, // degrees, if the device reports it
+      accuracy: Number, // metres, if the device reports it
       updatedAt: Date,
     },
 

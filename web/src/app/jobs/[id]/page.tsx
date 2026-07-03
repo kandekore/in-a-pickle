@@ -7,6 +7,7 @@ import type { Socket } from 'socket.io-client';
 import { useAuth } from '@/lib/auth';
 import { createSocket, type TrackingUpdate } from '@/lib/socket';
 import TrackingMap from '@/components/TrackingMap';
+import { useLiveRoute } from '@/components/map/useLiveRoute';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -36,6 +37,7 @@ export default function JobTrackingPage() {
   const [job, setJob] = useState<any>(null);
   const [status, setStatus] = useState<string>('requested');
   const [provider, setProvider] = useState<[number, number] | null>(null);
+  const [providerMeta, setProviderMeta] = useState<{ heading?: number | null; accuracy?: number | null }>({});
   const [eta, setEta] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -63,6 +65,9 @@ export default function JobTrackingPage() {
         setStatus(d.job.status);
         if (d.job.tracking?.providerLocation?.length === 2) setProvider(d.job.tracking.providerLocation);
         if (d.job.tracking?.etaSeconds != null) setEta(d.job.tracking.etaSeconds);
+        if (d.job.tracking?.heading != null || d.job.tracking?.accuracy != null) {
+          setProviderMeta({ heading: d.job.tracking.heading, accuracy: d.job.tracking.accuracy });
+        }
       })
       .catch((e) => !cancelled && setError(e.message));
 
@@ -72,7 +77,8 @@ export default function JobTrackingPage() {
     socket.on('tracking:update', (u: TrackingUpdate) => {
       if (u.jobId !== jobId) return;
       setProvider([u.lng, u.lat]);
-      setEta(u.etaSeconds);
+      setProviderMeta({ heading: u.heading, accuracy: u.accuracy });
+      if (u.etaSeconds != null) setEta(u.etaSeconds);
     });
     socket.on('job:status', (s: { jobId: string; status: string }) => {
       if (s.jobId === jobId) setStatus(s.status);
@@ -89,6 +95,12 @@ export default function JobTrackingPage() {
     () => (job?.location?.coordinates?.length === 2 ? job.location.coordinates : null),
     [job],
   );
+
+  // Accurate driving route + ETA via ORS (falls back to the socket ETA if the
+  // routing provider is unavailable).
+  const route = useLiveRoute(provider, customer);
+  const etaSeconds = route?.durationSeconds ?? eta;
+  const distanceKm = route ? route.distanceMeters / 1000 : null;
 
   const currentStep = STEPS.findIndex((s) => s.key === status);
 
@@ -121,7 +133,10 @@ export default function JobTrackingPage() {
         {['en_route'].includes(status) && (
           <div className="rounded-xl bg-mint-100 px-5 py-3 text-center">
             <p className="text-xs font-semibold uppercase tracking-wider text-secondary">ETA</p>
-            <p className="text-2xl font-bold text-forest">{fmtEta(eta)}</p>
+            <p className="text-2xl font-bold text-forest">{fmtEta(etaSeconds)}</p>
+            {distanceKm != null && (
+              <p className="mt-0.5 text-xs font-medium text-ink/60">{distanceKm.toFixed(1)} km away</p>
+            )}
           </div>
         )}
       </div>
@@ -151,7 +166,13 @@ export default function JobTrackingPage() {
         {/* Map */}
         <div>
           {customer ? (
-            <TrackingMap customer={customer} provider={provider} />
+            <TrackingMap
+              customer={customer}
+              provider={provider}
+              route={route?.geometry ?? null}
+              providerAccuracy={providerMeta.accuracy}
+              providerHeading={providerMeta.heading}
+            />
           ) : (
             <div className="grid h-[420px] place-items-center rounded-2xl border border-trim text-ink/60">
               No location on this job.

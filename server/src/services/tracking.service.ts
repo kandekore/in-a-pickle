@@ -5,19 +5,21 @@ import { notify } from './notification.service.js';
 import { logger } from '../utils/logger.js';
 
 /**
- * Live tracking simulator.
+ * Live tracking service.
  *
- * Real provider apps push GPS over Socket.IO; for the web demo we interpolate
- * the provider's position from their start point toward the customer and emit
- * `tracking:update` to the job room every few seconds, recomputing ETA and
- * auto-marking the job `arrived` once inside the configured arrival radius.
+ * Production path: real provider devices push GPS over Socket.IO; the socket
+ * layer calls `recordProviderLocation()` which persists the snapshot to
+ * `Job.tracking`, re-broadcasts `tracking:update` to the job room, and
+ * auto-marks the job `arrived` once inside the configured arrival radius.
  *
- * This is the ONLY simulated piece — the transport, rooms, payload shape and
- * arrival logic are exactly what a real device feed would drive.
+ * Demo path (opt-in): `startTrackingSim()` interpolates a provider's approach
+ * for a hands-free demo. It is gated behind `env.tracking.simulatorEnabled`
+ * (TRACKING_SIMULATOR=true) and is OFF by default — see provider.routes.ts.
+ *
+ * Both paths share the same transport, rooms, payload shape and arrival logic.
  */
 
 const DEMO_TICK_MS = 3000; // faster than settings.gpsUpdateInterval so the demo is watchable
-const ASSUMED_SPEED_MPS = 11; // ~25 mph for ETA estimation
 const STEPS = 10;
 
 const active = new Map<string, NodeJS.Timeout>();
@@ -38,6 +40,82 @@ function distanceMeters([lng1, lat1]: LngLat, [lng2, lat2]: LngLat): number {
 
 export function isTracking(jobId: string): boolean {
   return active.has(jobId);
+}
+
+interface LocationMeta {
+  heading?: number | null;
+  accuracy?: number | null;
+}
+
+/**
+ * Record a REAL provider GPS fix for a job (the production tracking path).
+ *
+ * Persists the snapshot to `Job.tracking`, broadcasts `tracking:update` to the
+ * job room, and — reusing the same arrival logic as the simulator — auto-marks
+ * the job `arrived` once inside the configured radius. A cheap straight-line ETA
+ * (assumedSpeedMps) is stored so list views and initial loads always have a
+ * value without calling the routing provider on every fix.
+ *
+ * Consumers draw the accurate ORS route/ETA client-side via LocationService.
+ */
+export async function recordProviderLocation(
+  jobId: string,
+  here: LngLat,
+  meta: LocationMeta = {},
+): Promise<void> {
+  const io = getIO();
+  const job = await Job.findById(jobId);
+  if (!job) return;
+
+  const dest = job.location?.coordinates as LngLat | undefined;
+  const hasDest = Array.isArray(dest) && dest.length === 2;
+  const remaining = hasDest ? distanceMeters(here, dest!) : undefined;
+  const etaSeconds =
+    remaining != null ? Math.max(0, Math.round(remaining / settings.tracking.assumedSpeedMps)) : undefined;
+
+  await Job.findByIdAndUpdate(jobId, {
+    $set: {
+      'tracking.providerLocation': here,
+      'tracking.etaSeconds': etaSeconds,
+      'tracking.heading': meta.heading ?? undefined,
+      'tracking.accuracy': meta.accuracy ?? undefined,
+      'tracking.updatedAt': new Date(),
+    },
+  }).catch(() => undefined);
+
+  io?.to(`job:${jobId}`).emit('tracking:update', {
+    jobId,
+    lng: here[0],
+    lat: here[1],
+    etaSeconds,
+    remainingMeters: remaining != null ? Math.round(remaining) : undefined,
+    heading: meta.heading ?? undefined,
+    accuracy: meta.accuracy ?? undefined,
+    arrivalRadiusMeters: settings.tracking.arrivalRadiusMeters,
+    at: new Date().toISOString(),
+  });
+
+  // Auto-arrival — identical rule to the simulator.
+  if (
+    remaining != null &&
+    remaining <= settings.tracking.arrivalRadiusMeters &&
+    ['en_route', 'accepted', 'paid'].includes(job.status)
+  ) {
+    job.status = 'arrived';
+    job.set('timeline.arrivedAt', new Date());
+    await job.save();
+    stopTracking(jobId); // stop any demo simulator that may also be running
+    io?.to(`job:${jobId}`).emit('job:status', { jobId, status: 'arrived' });
+    await notify({
+      userId: String(job.customer),
+      jobId,
+      type: 'job_arrived',
+      title: 'Your provider has arrived',
+      body: 'Your provider is at your location.',
+      channels: ['in_app', 'sms'],
+    });
+    logger.info('Provider arrived (real GPS)', { jobId });
+  }
 }
 
 export function stopTracking(jobId: string): void {
@@ -66,7 +144,7 @@ export function startTrackingSim(jobId: string, start: LngLat, destination: LngL
     const lat = start[1] + (destination[1] - start[1]) * frac;
     const here: LngLat = [lng, lat];
     const remaining = distanceMeters(here, destination);
-    const etaSeconds = Math.max(0, Math.round(remaining / ASSUMED_SPEED_MPS));
+    const etaSeconds = Math.max(0, Math.round(remaining / settings.tracking.assumedSpeedMps));
 
     io?.to(`job:${jobId}`).emit('tracking:update', {
       jobId,

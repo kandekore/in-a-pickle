@@ -22,6 +22,28 @@ export const env = {
 
   mapboxToken: process.env.MAPBOX_TOKEN ?? '',
 
+  // OpenRouteService (routing + reverse geocoding). Proxied server-side so the
+  // key is never exposed to the browser or a future React Native client.
+  ors: {
+    apiKey: process.env.ORS_API_KEY ?? '',
+    baseUrl: process.env.ORS_BASE_URL ?? 'https://api.openrouteservice.org',
+  },
+
+  // Map style handed to MapLibre GL on the client (via GET /api/config).
+  // Defaults to OpenFreeMap "liberty" — full OpenStreetMap streets, keyless.
+  // For production-grade tiles/SLA set MAP_STYLE_URL to a keyed provider
+  // (MapTiler / Stadia).
+  map: {
+    styleUrl: process.env.MAP_STYLE_URL ?? 'https://tiles.openfreemap.org/styles/liberty',
+  },
+
+  // Live tracking runtime flags.
+  tracking: {
+    // The interpolating movement simulator is OFF by default — real provider
+    // GPS drives tracking. Set TRACKING_SIMULATOR=true for demos/tests.
+    simulatorEnabled: process.env.TRACKING_SIMULATOR === 'true',
+  },
+
   get isProd() {
     return this.nodeEnv === 'production';
   },

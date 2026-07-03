@@ -9,6 +9,8 @@ import { productsRouter } from './routes/products.routes.js';
 import { jobsRouter } from './routes/jobs.routes.js';
 import { adminRouter } from './routes/admin.routes.js';
 import { providerRouter } from './routes/provider.routes.js';
+import { configRouter } from './routes/config.routes.js';
+import { locationRouter } from './routes/location.routes.js';
 import { errorHandler, notFound } from './middleware/error.js';
 
 export function createApp() {
@@ -26,6 +28,8 @@ export function createApp() {
   app.use('/api', jobsRouter);
   app.use('/api', adminRouter);
   app.use('/api', providerRouter);
+  app.use('/api', configRouter);
+  app.use('/api', locationRouter);
 
   app.use(notFound);
   app.use(errorHandler);

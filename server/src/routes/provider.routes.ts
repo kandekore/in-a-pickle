@@ -6,6 +6,7 @@ import { isDbConnected } from '../db/connect.js';
 import { Provider } from '../models/Provider.js';
 import { Job, type ServiceType } from '../models/Job.js';
 import { settings } from '../config/settings.js';
+import { env } from '../config/env.js';
 import { notify } from '../services/notification.service.js';
 import { startTrackingSim, stopTracking } from '../services/tracking.service.js';
 import { getIO } from '../sockets/io.js';
@@ -199,14 +200,17 @@ providerRouter.post(
     if (next === 'completed') job.set('timeline.completedAt', new Date());
     await job.save();
 
-    // Real-time tracking lifecycle: start the live feed when en route,
-    // stop it once the provider has arrived or finished.
+    // Real-time tracking lifecycle. In production the provider's device streams
+    // real GPS over Socket.IO ('tracking:update') once en route — nothing to
+    // start here. The interpolating simulator is opt-in for demos/tests only.
     if (next === 'en_route') {
-      const start = provider.location?.coordinates as [number, number] | undefined;
-      const dest = job.location?.coordinates as [number, number] | undefined;
-      if (start && dest) startTrackingSim(String(job._id), start, dest);
+      if (env.tracking.simulatorEnabled) {
+        const start = provider.location?.coordinates as [number, number] | undefined;
+        const dest = job.location?.coordinates as [number, number] | undefined;
+        if (start && dest) startTrackingSim(String(job._id), start, dest);
+      }
     } else if (next === 'arrived' || next === 'completed') {
-      stopTracking(String(job._id));
+      stopTracking(String(job._id)); // no-op unless a demo simulator is running
     }
     getIO()?.to(`job:${String(job._id)}`).emit('job:status', { jobId: String(job._id), status: next });
 

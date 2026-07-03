@@ -28,6 +28,12 @@ export interface PlatformSettings {
   tracking: {
     /** How often providers push GPS, in seconds (spec: 30–60s). */
     gpsUpdateIntervalSeconds: number;
+    /** How often the provider app transmits GPS while on an active job (seconds). */
+    providerPingSeconds: number;
+    /** How often consumers refresh the ORS route/ETA while a map is open (seconds). */
+    routeRefreshSeconds: number;
+    /** Assumed average speed for the cheap straight-line ETA fallback (m/s). */
+    assumedSpeedMps: number;
     /** Auto-mark "arrived" within this radius of the customer (metres). */
     arrivalRadiusMeters: number;
   };
@@ -91,6 +97,9 @@ export const settings: PlatformSettings = {
 
   tracking: {
     gpsUpdateIntervalSeconds: 45,
+    providerPingSeconds: 5,
+    routeRefreshSeconds: 15,
+    assumedSpeedMps: 11, // ~25 mph
     arrivalRadiusMeters: 100,
   },
 

@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import LiveMap from '@/components/map/LiveMap';
+import { useProviderTracking } from '@/components/map/useProviderTracking';
+import { useLiveRoute } from '@/components/map/useLiveRoute';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -13,6 +16,12 @@ const NEXT_LABEL: Record<string, string> = {
   arrived: 'Begin assessment',
   in_progress: 'Complete job',
 };
+
+function fmtEta(seconds?: number | null): string {
+  if (seconds == null) return '—';
+  const m = Math.round(seconds / 60);
+  return m >= 1 ? `${m} min` : 'Arriving';
+}
 
 export default function ProviderPage() {
   const { user, loading, logout, authedFetch } = useAuth();
@@ -96,11 +105,18 @@ export default function ProviderPage() {
     loadMe();
   }
 
+  // Derived state + live-tracking hooks — declared before any early return so
+  // hook order stays stable across renders.
+  const online = Boolean(me?.provider?.online);
+  const enRouteJob = mine.find((j) => j.status === 'en_route') ?? null;
+  const enRouteCustomer = (enRouteJob?.location?.coordinates ?? null) as [number, number] | null;
+  const { position, error: geoError } = useProviderTracking(online, enRouteJob?._id ?? null);
+  const route = useLiveRoute(position?.coords ?? null, enRouteCustomer);
+
   if (loading || !user || user.role !== 'provider') {
     return <div className="container-page py-24 text-center text-ink/70">Checking access…</div>;
   }
 
-  const online = Boolean(me?.provider?.online);
   const caps = me?.provider?.capabilities ?? {};
   const activeJobs = mine.filter((j) => ACTIVE_STATUSES.includes(j.status));
 
@@ -163,6 +179,46 @@ export default function ProviderPage() {
         <p className="mt-4 rounded-lg bg-mint-100 px-4 py-3 text-forest" role="status">
           {note}
         </p>
+      )}
+
+      {/* Live location — active only while Online (real GPS over Socket.IO). */}
+      {online && (
+        <section className="mt-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-2xl">Your live location</h2>
+            {enRouteJob && route && (
+              <div className="rounded-lg bg-mint-100 px-4 py-2 text-sm">
+                <span className="font-semibold text-forest">{fmtEta(route.durationSeconds)}</span>
+                <span className="text-ink/60"> · {(route.distanceMeters / 1000).toFixed(1)} km to customer</span>
+              </div>
+            )}
+          </div>
+
+          {geoError ? (
+            <p className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-red-800" role="alert">
+              {geoError} — allow location access so customers can track you.
+            </p>
+          ) : !position ? (
+            <p className="mt-3 card text-ink/70">
+              Waiting for your location… allow location access when your browser prompts.
+            </p>
+          ) : (
+            <div className="mt-3">
+              <LiveMap
+                provider={position.coords}
+                providerAccuracy={position.accuracy}
+                providerHeading={position.heading}
+                customer={enRouteCustomer}
+                route={route?.geometry ?? null}
+              />
+              <p className="mt-2 text-xs text-ink/60">
+                Sharing your live location while Online
+                {enRouteJob ? ' · streaming to your active job' : ''} · accuracy ±
+                {Math.round(position.accuracy ?? 0)} m.
+              </p>
+            </div>
+          )}
+        </section>
       )}
 
       <div className="mt-10 grid gap-10 lg:grid-cols-2">

@@ -2,9 +2,9 @@ import type { Server as HttpServer } from 'node:http';
 import { Server as IOServer, type Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
-import { settings } from '../config/settings.js';
 import { logger } from '../utils/logger.js';
 import { setIO } from './io.js';
+import { recordProviderLocation } from '../services/tracking.service.js';
 import type { Role } from '../models/User.js';
 
 /**
@@ -44,21 +44,29 @@ export function attachSockets(httpServer: HttpServer): IOServer {
     logger.info('Socket connected', { userId, role });
 
     // Join a job room (customer or assigned provider).
+    // TODO(sprint-next): authorise room membership server-side — currently any
+    // authenticated socket may join any job:<id> room. Deferred by agreement.
     socket.on('job:join', (jobId: string) => {
       socket.join(`job:${jobId}`);
     });
 
-    // Provider pushes a GPS update; relay to the job room with ETA.
-    // Expected cadence: settings.tracking.gpsUpdateIntervalSeconds.
+    // Provider pushes a REAL GPS fix; the tracking service persists it to
+    // Job.tracking, broadcasts to the job room, and auto-marks 'arrived' inside
+    // the arrival radius. Expected cadence: settings.tracking.providerPingSeconds.
     socket.on(
       'tracking:update',
-      (payload: { jobId: string; lng: number; lat: number; etaSeconds?: number }) => {
-        io.to(`job:${payload.jobId}`).emit('tracking:update', {
-          ...payload,
-          arrivalRadiusMeters: settings.tracking.arrivalRadiusMeters,
-          at: new Date().toISOString(),
+      (payload: {
+        jobId: string;
+        lng: number;
+        lat: number;
+        heading?: number | null;
+        accuracy?: number | null;
+      }) => {
+        if (role !== 'provider') return; // only the assigned provider streams GPS
+        void recordProviderLocation(payload.jobId, [payload.lng, payload.lat], {
+          heading: payload.heading,
+          accuracy: payload.accuracy,
         });
-        // TODO(platform): persist to Job.tracking + auto-emit 'arrived' inside radius.
       },
     );
 
