@@ -1,0 +1,25 @@
+{
+  "name": "in-a-pickle-breakdown",
+  "version": "0.1.0",
+  "private": true,
+  "description": "In a Pickle Breakdown — pay-as-you-need breakdown & recovery marketplace (Next.js web + Express API)",
+  "workspaces": [
+    "web",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -n web,api -c green,cyan \"npm run dev -w web\" \"npm run dev -w server\"",
+    "dev:web": "npm run dev -w web",
+    "dev:api": "npm run dev -w server",
+    "build": "npm run build -w server && npm run build -w web",
+    "start:web": "npm run start -w web",
+    "start:api": "npm run start -w server",
+    "lint": "npm run lint -w web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

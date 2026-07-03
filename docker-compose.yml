@@ -1,0 +1,37 @@
+# Container-ready local stack: MongoDB + API + Web.
+# Secrets come from .env (see .env.example). Dev/staging/prod differ by env only.
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  api:
+    build:
+      context: ./server
+    env_file: .env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/in_a_pickle
+      WEB_ORIGIN: http://localhost:3000
+    depends_on:
+      - mongo
+    ports:
+      - "4000:4000"
+
+  web:
+    build:
+      context: ./web
+    env_file: .env
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      NEXT_PUBLIC_SOCKET_URL: http://localhost:4000
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  mongo_data:

@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #fbfdfb;
+  --foreground: #1a1c1a;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-surface text-ink antialiased;
+    /* Dyslexia-friendly rhythm */
+    line-height: 1.7;
+    letter-spacing: 0.01em;
+  }
+  /* Headings use the confident display face; tight tracking for a sharp look. */
+  h1, h2, h3, h4 {
+    @apply font-display font-bold text-forest;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  /* Rich-text (body_content from the brief) gets readable defaults */
+  .prose-pickle {
+    @apply max-w-prose text-ink/90;
+  }
+  .prose-pickle h2 {
+    @apply text-2xl mt-10 mb-3;
+  }
+  .prose-pickle h3 {
+    @apply text-xl mt-7 mb-2;
+  }
+  .prose-pickle p {
+    @apply my-4;
+  }
+  .prose-pickle ul {
+    @apply my-4 list-disc pl-6 space-y-2;
+  }
+  .prose-pickle ol {
+    @apply my-4 list-decimal pl-6 space-y-2;
+  }
+  .prose-pickle a {
+    @apply font-semibold text-secondary underline underline-offset-2 hover:text-forest;
+  }
+  .prose-pickle strong {
+    @apply text-forest;
+  }
+  /* Visible focus for keyboard users (WCAG 2.4.7) */
+  :focus-visible {
+    @apply outline-none ring-2 ring-secondary ring-offset-2 ring-offset-surface;
+  }
+}
+
+@layer components {
+  /* ---- Buttons — sharper radius, subtle press + lift ---------------------- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-5 py-3 text-sm font-bold leading-none transition
+           duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 active:translate-y-px;
+  }
+  .btn-lg {
+    @apply px-6 py-4 text-base;
+  }
+  /* Forest-green fill + white text → passes WCAG AA contrast */
+  .btn-primary {
+    @apply btn bg-secondary text-white shadow-btn hover:bg-forest hover:-translate-y-0.5;
+  }
+  .btn-outline {
+    @apply btn border border-secondary/40 bg-white text-secondary hover:border-secondary hover:bg-mint-50;
+  }
+  /* On dark bands: translucent glass outline */
+  .btn-ghost-light {
+    @apply btn border border-white/25 bg-white/5 text-white backdrop-blur hover:border-white/60 hover:bg-white/10
+           focus-visible:ring-white/70 focus-visible:ring-offset-night;
+  }
+  /* Amber accent only ever carries dark ink text */
+  .btn-accent {
+    @apply btn bg-accent text-night shadow-btn hover:bg-accent-600 hover:-translate-y-0.5
+           focus-visible:ring-accent focus-visible:ring-offset-night;
+  }
+
+  .container-page {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+  .card {
+    @apply rounded-xl border border-trim bg-white p-6 shadow-card transition duration-200;
+  }
+  /* Interactive cards lift and sharpen their border on hover. */
+  .card-hover {
+    @apply hover:-translate-y-1 hover:border-secondary/30 hover:shadow-lift;
+  }
+  .price-tag {
+    @apply inline-flex items-center rounded-md bg-accent px-2.5 py-1 text-base font-extrabold text-night;
+  }
+  /* Thin uppercase label above headings, with a short leading rule. */
+  .eyebrow {
+    @apply inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-secondary;
+  }
+  .eyebrow::before {
+    content: '';
+    @apply h-px w-6 bg-secondary/60;
+  }
+  .eyebrow-light {
+    @apply text-signal;
+  }
+  .eyebrow-light::before {
+    @apply bg-signal/70;
+  }
+}
+
+@layer utilities {
+  /* Deep forest sheen used on high-impact dark bands / heroes. */
+  .sheen-night {
+    background:
+      radial-gradient(80% 120% at 85% -10%, rgba(94, 240, 138, 0.16), transparent 55%),
+      radial-gradient(70% 90% at 0% 110%, rgba(76, 175, 80, 0.14), transparent 60%),
+      linear-gradient(160deg, #0b1f13 0%, #08170e 55%, #061109 100%);
+  }
+  /* Scrim over hero photography so white text stays legible. */
+  .scrim-hero {
+    background: linear-gradient(
+      100deg,
+      rgba(6, 17, 9, 0.94) 0%,
+      rgba(7, 21, 12, 0.86) 42%,
+      rgba(8, 23, 14, 0.55) 72%,
+      rgba(8, 23, 14, 0.35) 100%
+    );
+  }
+  /* Faint dotted texture for light sections. */
+  .dot-grid {
+    background-image: radial-gradient(rgba(27, 94, 32, 0.10) 1px, transparent 1.4px);
+    background-size: 22px 22px;
+  }
+}

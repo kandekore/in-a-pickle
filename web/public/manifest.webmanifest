@@ -1,0 +1,17 @@
+{
+  "name": "In a Pickle Breakdown",
+  "short_name": "In a Pickle",
+  "description": "Pay-as-you-need breakdown & recovery. Help when you need it.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbfdfb",
+  "theme_color": "#2e7d32",
+  "icons": [
+    {
+      "src": "/assets/brand/logo.webp",
+      "sizes": "any",
+      "type": "image/webp",
+      "purpose": "any"
+    }
+  ]
+}
