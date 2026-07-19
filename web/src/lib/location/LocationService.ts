@@ -1,6 +1,8 @@
 import { site } from '../site';
 import {
   DEFAULT_TRACKING_CONFIG,
+  type AddressSuggestion,
+  type CoarseLocation,
   type GeoLocationError,
   type GeoPosition,
   type ILocationService,
@@ -87,6 +89,36 @@ class BrowserLocationService implements ILocationService {
       if (!res.ok) return null;
       const data = (await res.json()) as { label?: string | null };
       return data.label ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  async autocomplete(text: string, focus?: LngLat | null): Promise<AddressSuggestion[]> {
+    const q = text.trim();
+    if (q.length < 3) return [];
+    try {
+      const params = new URLSearchParams({ text: q });
+      if (focus) {
+        params.set('lon', String(focus[0]));
+        params.set('lat', String(focus[1]));
+      }
+      const res = await fetch(`${site.apiUrl}/api/geo/autocomplete?${params.toString()}`);
+      if (!res.ok) return [];
+      const data = (await res.json()) as { suggestions?: AddressSuggestion[] };
+      return data.suggestions ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  async ipLocate(): Promise<CoarseLocation | null> {
+    try {
+      const res = await fetch(`${site.apiUrl}/api/geo/ip`);
+      if (!res.ok) return null;
+      const data = (await res.json()) as { label?: string | null; coordinates?: LngLat | null };
+      if (!data.coordinates || !data.label) return null;
+      return { label: data.label, coordinates: data.coordinates };
     } catch {
       return null;
     }

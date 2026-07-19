@@ -22,6 +22,11 @@ export const env = {
 
   mapboxToken: process.env.MAPBOX_TOKEN ?? '',
 
+  // Coarse IP-based geolocation, used only to PRE-FILL the request form before
+  // the user grants precise geolocation. Keyless ip-api.com by default (free,
+  // 45 req/min, server-side only). Override IP_GEO_URL for a keyed provider.
+  ipGeoUrl: process.env.IP_GEO_URL ?? 'http://ip-api.com/json',
+
   // OpenRouteService (routing + reverse geocoding). Proxied server-side so the
   // key is never exposed to the browser or a future React Native client.
   ors: {

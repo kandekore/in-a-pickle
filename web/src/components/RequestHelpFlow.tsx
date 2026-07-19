@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { fetchQuote, createJob, lookupVehicle, type Quote, type VehicleLookup } from '@/lib/api';
 import { products } from '@/lib/site';
+import AddressAutocomplete from './AddressAutocomplete';
+import { locationService } from '@/lib/location/LocationService';
+import type { AddressSuggestion } from '@/lib/location/types';
 
 type ServiceType = Quote['serviceType'];
 
@@ -46,11 +49,14 @@ export default function RequestHelpFlow() {
   );
   const [quote, setQuote] = useState<Quote | null>(null);
   const [coords, setCoords] = useState<[number, number] | null>(null);
+  const [address, setAddress] = useState('');
+  const [locationSource, setLocationSource] = useState<'gps' | 'address' | 'ip' | null>(null);
   const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [trackId, setTrackId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
 
   // ── Vehicle lookup state ──
   const [plate, setPlate] = useState('');
@@ -71,6 +77,31 @@ export default function RequestHelpFlow() {
       active = false;
     };
   }, [service]);
+
+  // Coarse IP pre-fill on load — gives most users an approximate area instantly,
+  // no permission prompt. Only applied if they haven't already set something
+  // more precise (GPS / picked address), and never overrides their typing.
+  useEffect(() => {
+    let active = true;
+    locationService.ipLocate().then((loc) => {
+      if (!active || !loc) return;
+      setLocationSource((prev) => {
+        if (prev) return prev; // GPS or an address pick already won
+        setCoords(loc.coordinates);
+        setAddress((cur) => cur || loc.label);
+        return 'ip';
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  function onPickAddress(s: AddressSuggestion) {
+    setCoords(s.coordinates);
+    setAddress(s.label);
+    setLocationSource('address');
+  }
 
   async function runLookup() {
     setLookupError(null);
@@ -99,13 +130,41 @@ export default function RequestHelpFlow() {
 
   function useMyLocation() {
     setError(null);
-    if (!navigator.geolocation) {
-      setError('Geolocation is not available in this browser.');
+    // Geolocation only works in a secure context (HTTPS, or localhost in dev).
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      setError('Location needs a secure https:// connection. Please describe where you are below instead.');
       return;
     }
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by this browser. Please describe where you are below instead.');
+      return;
+    }
+    setLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => setCoords([pos.coords.longitude, pos.coords.latitude]),
-      () => setError('Could not get your location. You can still describe where you are.'),
+      (pos) => {
+        const c: [number, number] = [pos.coords.longitude, pos.coords.latitude];
+        setCoords(c);
+        setLocationSource('gps');
+        setLocating(false);
+        // Fill the address box with a readable label (best-effort; anon users
+        // may get null since reverse-geocode is authed — coords still stand).
+        locationService.reverseGeocode(c).then((label) => label && setAddress(label));
+      },
+      (err) => {
+        setLocating(false);
+        // Surface the specific reason (code) so users can self-fix instead of hitting a dead end.
+        const reason =
+          err.code === err.PERMISSION_DENIED
+            ? 'Location is blocked for this site. Tap the padlock/address bar → allow Location, then try again — or just describe where you are below.'
+            : err.code === err.POSITION_UNAVAILABLE
+              ? "Your device couldn't get a location fix (check GPS / mobile signal, or that Location Services is on). You can describe where you are below."
+              : err.code === err.TIMEOUT
+                ? 'Getting your location took too long. Try again, or describe where you are below.'
+                : err.message || 'Could not get your location.';
+        console.warn('[request-help] geolocation error', { code: err.code, message: err.message });
+        setError(`${reason} (error code ${err.code})`);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
     );
   }
 
@@ -119,7 +178,16 @@ export default function RequestHelpFlow() {
     }
     setSubmitting(true);
     const form = Object.fromEntries(new FormData(e.currentTarget).entries()) as Record<string, string>;
-    const location: [number, number] = coords ?? [-0.1276, 51.5072]; // fallback: London
+
+    // Resolve coordinates: a GPS fix / picked address wins; otherwise geocode
+    // whatever they typed so the job is placed correctly. London is a last-ditch
+    // fallback only if everything above is unavailable.
+    let resolved = coords;
+    if (!resolved && form.address?.trim()) {
+      const [first] = await locationService.autocomplete(form.address);
+      if (first) resolved = first.coordinates;
+    }
+    const location: [number, number] = resolved ?? [-0.1276, 51.5072];
 
     // Confirmed lookup wins; otherwise fall back to any manual entry.
     const vehiclePayload = vehicle
@@ -358,20 +426,38 @@ export default function RequestHelpFlow() {
         <fieldset className="card grid gap-3">
           <legend className="eyebrow">3. Where are you?</legend>
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" onClick={useMyLocation} className="btn-outline">
-              Use my location
+            <button
+              type="button"
+              onClick={useMyLocation}
+              disabled={locating}
+              className="btn-outline disabled:opacity-60"
+            >
+              {locating ? 'Locating…' : 'Use my location'}
             </button>
-            {coords && (
+            {coords && locationSource && (
               <span className="text-sm text-secondary">
-                Location set ({coords[1].toFixed(4)}, {coords[0].toFixed(4)})
+                {locationSource === 'gps'
+                  ? '📍 Precise location set'
+                  : locationSource === 'address'
+                    ? '📍 Address pinned'
+                    : '📍 Approximate area (from your connection)'}{' '}
+                ({coords[1].toFixed(3)}, {coords[0].toFixed(3)})
               </span>
             )}
           </div>
-          <input
+          <AddressAutocomplete
             name="address"
-            placeholder="Or describe where you are (road, junction, landmark)…"
-            className="rounded-lg border border-trim px-3 py-2"
+            value={address}
+            onChange={setAddress}
+            onSelect={onPickAddress}
+            focus={coords}
+            placeholder="Start typing your address, road, junction or landmark…"
+            className="w-full rounded-lg border border-trim px-3 py-2"
           />
+          <p className="text-xs text-secondary">
+            Tip: no need to allow location — start typing and pick your address, and we&apos;ll pin
+            it exactly.
+          </p>
           <label className="mt-1 flex items-start gap-2 text-sm">
             <input
               type="checkbox"

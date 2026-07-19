@@ -34,6 +34,16 @@ export interface WatchOptions {
   enableHighAccuracy?: boolean;
 }
 
+export interface AddressSuggestion {
+  label: string;
+  coordinates: LngLat; // [lng, lat]
+}
+
+export interface CoarseLocation {
+  label: string;
+  coordinates: LngLat; // [lng, lat]
+}
+
 export interface ILocationService {
   /** One-shot current position (prompts for permission). */
   getCurrentPosition(opts?: WatchOptions): Promise<GeoPosition>;
@@ -49,6 +59,10 @@ export interface ILocationService {
   getRoute(from: LngLat, to: LngLat): Promise<RouteResult | null>;
   /** Human-readable label for a coordinate (via the backend ORS proxy). */
   reverseGeocode(point: LngLat): Promise<string | null>;
+  /** Predictive address search (via the backend ORS proxy), optionally biased near `focus`. */
+  autocomplete(text: string, focus?: LngLat | null): Promise<AddressSuggestion[]>;
+  /** Coarse IP-based location to pre-fill forms — best-effort, may be null. */
+  ipLocate(): Promise<CoarseLocation | null>;
   /** Client-safe runtime config (map style + tracking cadences). */
   getConfig(): Promise<TrackingConfig>;
 }

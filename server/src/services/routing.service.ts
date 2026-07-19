@@ -57,6 +57,63 @@ export async function getDirections(from: LngLat, to: LngLat): Promise<RouteResu
   };
 }
 
+export interface AddressSuggestion {
+  label: string;
+  coordinates: LngLat; // [lng, lat]
+}
+
+/**
+ * Predictive address search (ORS / Pelias autocomplete), UK-biased. Optionally
+ * biased toward a focus point so nearby streets rank first. Powers the
+ * type-ahead on the request form.
+ */
+export async function autocompleteAddress(
+  text: string,
+  focus?: LngLat | null,
+): Promise<AddressSuggestion[]> {
+  // Type-ahead must degrade gracefully: on no-key / provider error / timeout,
+  // return no suggestions rather than erroring — the user can still type freely
+  // and the address is geocoded on submit.
+  if (!env.ors.apiKey) return [];
+
+  const params = new URLSearchParams({
+    api_key: env.ors.apiKey,
+    text,
+    'boundary.country': 'GB',
+    size: '6',
+  });
+  if (focus) {
+    params.set('focus.point.lon', String(focus[0]));
+    params.set('focus.point.lat', String(focus[1]));
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(`${env.ors.baseUrl}/geocode/autocomplete?${params.toString()}`, {
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      logger.warn('ORS autocomplete failed', { status: res.status });
+      return [];
+    }
+    const data = (await res.json()) as {
+      features?: { geometry?: { coordinates?: LngLat }; properties?: { label?: string } }[];
+    };
+    return (data.features ?? [])
+      .filter((f) => f.properties?.label && Array.isArray(f.geometry?.coordinates))
+      .map((f) => ({
+        label: f.properties!.label as string,
+        coordinates: f.geometry!.coordinates as LngLat,
+      }));
+  } catch (err) {
+    logger.warn('ORS autocomplete error', { message: (err as Error).message });
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Human-readable label for a coordinate (ORS / Pelias reverse geocode). */
 export async function reverseGeocode([lng, lat]: LngLat): Promise<string | null> {
   ensureConfigured();
